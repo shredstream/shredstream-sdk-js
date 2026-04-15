@@ -1,5 +1,10 @@
 import bs58 from 'bs58';
 
+const MAX_TX_PER_ENTRY = 10_000;
+const MAX_SIGNATURES_PER_TX = 64;
+
+class DecoderError extends Error {}
+
 export interface Transaction {
   signatures: Buffer[];
   raw: Buffer;
@@ -40,6 +45,9 @@ function tryWalkTransaction(buf: Buffer, offset: number, length: number): [numbe
   const r0 = tryReadCompactU16(buf, off, length);
   if (!r0) return null;
   const [sigCount, newOff0] = r0;
+  if (sigCount > MAX_SIGNATURES_PER_TX) {
+    throw new DecoderError(`corrupt sig_count: ${sigCount} exceeds limit`);
+  }
   off = newOff0;
 
   const signatures: Buffer[] = [];
@@ -121,7 +129,12 @@ export class BatchDecoder {
   push(payload: Buffer): Transaction[] {
     this.hadError = false;
     this.buf = Buffer.concat([this.buf, payload]);
-    return this.tryDeserialize();
+    try {
+      return this.tryDeserialize();
+    } catch {
+      this.hadError = true;
+      return [];
+    }
   }
 
   reset(): void {
@@ -154,7 +167,12 @@ export class BatchDecoder {
       let off = this.cursor;
       off += 8 + 32;
       if (off + 8 > len) break;
-      const txCount = Number(buf.readBigUInt64LE(off));
+      const txCountBig = buf.readBigUInt64LE(off);
+      if (txCountBig > BigInt(MAX_TX_PER_ENTRY)) {
+        this.hadError = true;
+        return txs;
+      }
+      const txCount = Number(txCountBig);
       off += 8;
 
       const entryTxs: Transaction[] = [];

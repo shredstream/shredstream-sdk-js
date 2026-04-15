@@ -8,12 +8,15 @@ interface PendingShred {
 
 export class SlotAccumulator {
   private static readonly GAP_SKIP_THRESHOLD = 5;
+  private static readonly MAX_AWAITING_SKIPPED = 64;
 
   private pending = new Map<number, PendingShred>();
   private decoder = new BatchDecoder();
   private _nextIndex = 0;
   private _stallCount = 0;
   private _decodeErrors = 0;
+  private awaitingBatchStart = false;
+  private awaitingSkipped = 0;
 
   slotComplete = false;
 
@@ -44,6 +47,18 @@ export class SlotAccumulator {
       const shred = this.pending.get(this._nextIndex)!;
       this.pending.delete(this._nextIndex);
       this._nextIndex++;
+
+      if (this.awaitingBatchStart) {
+        this.awaitingSkipped++;
+        if (shred.batchComplete) {
+          this.awaitingBatchStart = false;
+          this.awaitingSkipped = 0;
+        } else if (this.awaitingSkipped >= SlotAccumulator.MAX_AWAITING_SKIPPED) {
+          this._decodeErrors++;
+          return allTxs;
+        }
+        continue;
+      }
 
       if (shred.lastInSlot) {
         this.slotComplete = true;
@@ -76,6 +91,8 @@ export class SlotAccumulator {
         this._nextIndex = minKey;
         this._stallCount = 0;
         this.decoder.reset();
+        this.awaitingBatchStart = true;
+        this.awaitingSkipped = 0;
         const skippedTxs = this.drain();
         allTxs.push(...skippedTxs);
       }
