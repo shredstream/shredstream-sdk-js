@@ -1,6 +1,6 @@
 {
   "name": "shredstream",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Solana ShredStream SDK/Decoder for JavaScript/TypeScript, enabling ultra-low latency Solana transaction streaming via UDP shreds from https://www.shredstream.com",
   "author": "ShredStream.com",
   "main": "dist/index.js",
