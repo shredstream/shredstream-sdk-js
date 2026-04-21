@@ -49,11 +49,6 @@ listener.on('transactions', (slot, txs) => {
   txs.forEach(tx => console.log(`slot ${slot}: ${tx.signature}`));
 });
 
-// OR raw shreds — lowest latency, arrives before block assembly
-// listener.on('shred', (slot, index, payload) => {
-//   console.log(`slot ${slot} index ${index} len ${payload.length}`);
-// });
-
 listener.start();
 ```
 
@@ -79,11 +74,6 @@ listener.on('transactions', (slot, txs) => {
   txs.forEach(tx => console.log(`slot ${slot}: ${tx.signature}`));
 });
 
-// OR raw shreds — lowest latency, arrives before block assembly
-// listener.on('shred', (slot, index, payload) => {
-//   console.log(`slot ${slot} index ${index} len ${payload.length}`);
-// });
-
 listener.start();
 ```
 
@@ -105,7 +95,6 @@ node index.js
 
 #### Events
 
-- `'shred'` `(slot: bigint, index: number, payload: Buffer)` — Emitted for each received data shred
 - `'transactions'` `(slot: bigint, txs: Transaction[])` — Emitted as transactions are decoded from incoming shreds
 
 #### Methods
@@ -132,7 +121,7 @@ ShredStream.com SDK detects PumpFun token creations **~499ms before they appear 
 
 <img src="https://raw.githubusercontent.com/shredstream/shredstream-sdk-js/main/assets/shredstream.com_sdk_vs_pumpfun_live_feed.gif" alt="ShredStream.com SDK vs PumpFun live feed — ~499ms advantage" width="600">
 
-> [ShredStream.com](https://shredstream.com) provides a complete, optimized PumpFun token creation detection code exclusively to Pro plan subscribers and above. Battle-tested, high-performance, ready to plug into your sniping pipeline. To get access, open a ticket on [Discord](https://discord.gg/4w2DNbTaWD) or reach out on Telegram [@shredstream](https://t.me/shredstream).
+> [ShredStream.com](https://shredstream.com) provides a complete, optimized PumpFun token creation detection code available with our monthly subscription plan. Battle-tested, high-performance, ready to plug into your sniping pipeline. To get access, open a ticket on [Discord](https://discord.gg/4w2DNbTaWD) or reach out on Telegram [@shredstream](https://t.me/shredstream).
 
 ## ⚙️ Configuration
 
