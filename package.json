@@ -1,33 +1,47 @@
 {
   "name": "shredstream",
-  "version": "1.0.4",
-  "description": "Solana ShredStream SDK/Decoder for JavaScript/TypeScript, enabling ultra-low latency Solana transaction streaming via UDP shreds from https://www.shredstream.com",
-  "author": "ShredStream.com",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "files": ["dist", "src", "README.md"],
-  "engines": { "node": ">=18" },
-  "scripts": {
-    "build": "tsc",
-    "example": "npx tsx examples/listen.ts"
-  },
-  "peerDependencies": {
-    "@solana/web3.js": "^1.90.0"
-  },
-  "devDependencies": {
-    "typescript": "^5.4",
-    "@solana/web3.js": "^1.90.0",
-    "@types/node": "^20",
-    "tsx": "^4.0.0"
-  },
-  "dependencies": {
-    "bs58": "^5.0.0"
-  },
-  "keywords": ["solana", "shredstream", "shred", "stream", "raw", "decoder", "parser", "transactions", "grpc", "rpc", "websocket", "udp", "sdk", "mev", "hft", "bot", "defi", "sniping", "pumpfun", "copytrading", "blockchain", "on-chain", "jito", "crypto", "detection", "trading", "latency", "speed", "performance"],
+  "version": "2.0.0",
+  "description": "Solana ShredStream SDK for Node.js — ultra-low latency UDP shred streaming",
   "homepage": "https://shredstream.com",
   "repository": {
     "type": "git",
-    "url": "https://github.com/shredstream/shredstream-sdk-js"
+    "url": "git+https://github.com/shredstream/shredstream-sdk-js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/shredstream/shredstream-sdk-js/issues"
+  },
+  "keywords": ["solana", "shredstream", "mev", "hft", "udp", "shred"],
+  "author": "ShredStream.com",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/",
+    "index.js",
+    "index.d.ts",
+    "shredstream.*.node"
+  ],
+  "scripts": {
+    "build": "napi build --platform --release --cargo-cwd ./napi-rs .",
+    "build:debug": "napi build --platform --cargo-cwd ./napi-rs ."
+  },
+  "napi": {
+    "name": "shredstream",
+    "triples": {
+      "defaults": true,
+      "additional": ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu"]
+    }
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18",
+    "@types/node": "^20",
+    "typescript": "^5.4",
+    "@solana/web3.js": "^1.91"
+  },
+  "peerDependencies": {
+    "@solana/web3.js": "^1.91"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "license": "MIT"
 }

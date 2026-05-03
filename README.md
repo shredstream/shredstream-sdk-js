@@ -34,23 +34,28 @@ npm install shredstream
 
 ## ⚡ Quick Start
 
-### TypeScript
-
 Create a file `index.ts`:
 
 ```typescript
 import { ShredListener } from 'shredstream';
+import { VersionedTransaction } from '@solana/web3.js';
 
 const PORT = parseInt(process.env.SHREDSTREAM_PORT || '8001');
-const listener = new ShredListener(PORT);
+const listener = ShredListener.bind(PORT);
 
-// Decoded transactions — ready-to-use Solana transactions
-listener.on('transactions', (slot, txs) => {
-  txs.forEach(tx => console.log(`slot ${slot}: ${tx.signature}`));
-});
-
-listener.start();
+while (true) {
+  const batch = listener.nextTransactionSync();
+  if (batch === null) {
+    throw new Error(`shredstream listener stopped: ${listener.lastIoErrorKind ?? 'unknown'}`);
+  }
+  for (const raw of batch.transactions) {
+    const tx = VersionedTransaction.deserialize(new Uint8Array(raw));
+    console.log(`slot ${batch.slot}: ${tx.signatures[0]}`);
+  }
+}
 ```
+
+> `nextTransactionSync()` is the lowest-latency path — recommended for dedicated MEV / sniping consumers. A `null` return is a terminal state (socket closed, fatal I/O like `BrokenPipe` or `NetworkDown`); inspect `listener.lastIoErrorKind` and let your process supervisor (systemd, Docker, k8s) restart you. If you need to mix with other Node async I/O (`dgram.send`, HTTP, timers), use `for await (const batch of listener)` instead — see [Performance](#-performance).
 
 Run it:
 
@@ -58,58 +63,67 @@ Run it:
 npx tsx index.ts
 ```
 
-### JavaScript
-
-Create a file `index.js`:
-
-```javascript
-const { ShredListener } = require('shredstream');
-
-// Bind to the UDP port configured on ShredStream.com
-const PORT = parseInt(process.env.SHREDSTREAM_PORT || '8001');
-const listener = new ShredListener(PORT);
-
-// Decoded transactions — ready-to-use Solana transactions
-listener.on('transactions', (slot, txs) => {
-  txs.forEach(tx => console.log(`slot ${slot}: ${tx.signature}`));
-});
-
-listener.start();
-```
-
-Run it:
-
-```bash
-node index.js
-```
-
 ## 📖 API Reference
 
-### `new ShredListener(port, options?)`
+### `ShredListener`
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `port` | `number` | — | UDP port to bind |
-| `options.recvBuf` | `number` | 8 MiB | Socket receive buffer size |
-| `options.maxAge` | `number` | 128 | Maximum slot age before eviction |
+- `ShredListener.bind(port)` — Bind with defaults (64 MB recv buf, 3 slot window, FEC enabled)
+- `ShredListener.bindWithOptions(port, opts)` — Custom configuration
+- `ShredListener.offline()` — Bind on ephemeral port; drive via `handlePacket()`
+- `ShredListener.fromFd(fd, opts)` — Adopt an existing UDP file descriptor
+- `listener.nextTransactionSync()` — **Sync** single-pull (lowest latency, MEV-grade — see [Performance](#-performance))
+- `for await (const { slot, transactions } of listener)` — Async iterator, compatible with other Node async I/O
+- `await listener.nextTransaction()` — Async single-pull, resolves to `{ slot, transactions } | null`
+- `await listener.nextShred()` — Raw shred header `{ slot, index, payloadLen }`
+- `listener.handlePacket(buf: Buffer)` — Inject an externally-received UDP datagram
+- `listener.close()` — Release the socket
 
-#### Events
+### Options
 
-- `'transactions'` `(slot: bigint, txs: Transaction[])` — Emitted as transactions are decoded from incoming shreds
+```typescript
+interface ListenerOptions {
+  recvBuf?: number;
+  maxAge?: bigint;
+  busyPollUs?: number;
+  disableBusyPoll?: boolean;
+  poolSize?: number;
+  enableFec?: boolean;
+  disableSalvageDelivery?: boolean;
+  accumulator?: { maxFecSetsPerSlot?: number; stuckBatchTimeoutMs?: number };
+}
+```
 
-#### Methods
+| Field | Default | Description |
+|-------|---------|-------------|
+| `recvBuf` | `64 MB` | `SO_RCVBUF` size. Kernel `rmem_max` must allow it |
+| `maxAge` | `3n` | Slot retention window |
+| `busyPollUs` | `200` | Linux `SO_BUSY_POLL` µs (best-effort) |
+| `disableBusyPoll` | `false` | Pass `true` to disable busy poll explicitly |
+| `poolSize` | `4096` | Number of 2 KiB buffers in the zero-copy pool |
+| `enableFec` | `true` | Reed-Solomon recovery on dropped data shreds |
+| `disableSalvageDelivery` | `false` | Drop salvaged tail txs for lowest p99 |
+| `accumulator.maxFecSetsPerSlot` | `32` | Per-slot FEC buffer cap |
+| `accumulator.stuckBatchTimeoutMs` | `50` | Force-finalize a stuck batch after this delay |
 
-- `listener.start()` — Create the UDP socket and begin listening
-- `listener.stop()` — Close the socket
-- `listener.activeSlots()` — Number of slots currently being accumulated
+### Metrics
 
-### `Transaction`
+Read-only getters mirroring the Rust crate. All `u64` counters are `bigint`:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `signatures` | `Buffer[]` | Raw 64-byte signatures |
-| `raw` | `Buffer` | Full wire-format transaction bytes |
-| `signature` | `string` | First signature as base58 |
+| Group | Getters |
+|-------|---------|
+| **Throughput** | `dataShredCountTotal`, `codeShredCountTotal`, `bytesReceived`, `slotCount` |
+| **Decoder** | `batchesDecodedStreamingTotal`, `batchesDecodedFallbackTotal`, `batchesSkippedTotal`, `decodeErrorsTotal` |
+| **FEC** | `fecRecoveriesTotal`, `fecRecoveryFailuresTotal`, `fecSetsDiscardedUnusedTotal`, `fecSetsEvictedEarlyTotal` |
+| **Unparseable** | `unparseablePackets`, `unparseableTooShort`, `unparseableVariant`, `unparseablePayload`, `unparseableSlotRange` |
+| **Slot lifecycle** | `slotsCompletedTotal`, `slotsEvictedByAge`, `droppedKnownSlots`, `harvestedBatchesTotal`, `salvagedTailTxTotal` |
+| **Tail control** | `batchesForceFinalizedCorruptedTotal`, `batchesForceFinalizedTimeoutTotal` |
+| **Pool / I-O** | `poolExhaustedCount`, `lastIoErrorKind`, `busyPollActive`, `localAddress` |
+
+### Helpers
+
+- `classifyVariant(byte: number)` → `'DataLegacy' | 'CodeLegacy' | 'DataMerkleUnchained' | 'DataMerkleResigned' | 'CodeMerkleUnchained' | 'CodeMerkleResigned' | null`
+- `variantProofSize(byte)` / `variantResigned(byte)` / `variantMerkleSuffix(byte)` — Merkle metadata
+- `pinCurrentThreadToCpu(cpuId: number)` — Best-effort thread pinning. Linux: `sched_setaffinity`; macOS: hint; other: no-op
 
 ## 🎯 Use Cases
 
@@ -121,18 +135,51 @@ ShredStream.com SDK detects PumpFun token creations **~499ms before they appear 
 
 <img src="https://raw.githubusercontent.com/shredstream/shredstream-sdk-js/main/assets/shredstream.com_sdk_vs_pumpfun_live_feed.gif" alt="ShredStream.com SDK vs PumpFun live feed — ~499ms advantage" width="600">
 
-> [ShredStream.com](https://shredstream.com) provides a complete, optimized PumpFun token creation detection code available with our monthly subscription plan. Battle-tested, high-performance, ready to plug into your sniping pipeline. To get access, open a ticket on [Discord](https://discord.gg/4w2DNbTaWD) or reach out on Telegram [@shredstream](https://t.me/shredstream).
+> Ready-to-run example included: see [`examples/pumpfun_creates.ts`](examples/pumpfun_creates.ts). Run with `npx tsx examples/pumpfun_creates.ts [port]`.
+
+## 🏎️ Performance
+
+Two delivery APIs, depending on what your process does between batches.
+
+### `listener.nextTransactionSync()` — MEV-grade hot loop (default in Quick Start)
+
+Synchronous pull. Returns `{ slot, transactions } | null` directly — no Promise allocation, no `Buffer.from` round-trip, no event-loop hop. Fastest possible delivery.
+
+```typescript
+while (true) {
+  const batch = listener.nextTransactionSync();
+  if (batch === null) {
+    throw new Error(`shredstream listener stopped: ${listener.lastIoErrorKind ?? 'unknown'}`);
+  }
+  for (const raw of batch.transactions) {
+    // synchronous decode + outbound send (e.g. raw-socket, RDMA, etc.)
+  }
+}
+```
+
+> ⚠️ **Sync mode blocks the libuv event loop** while parked on UDP `recv`. Any other async I/O in this process (`dgram.send`, HTTP, `fs.readFile`, `setTimeout`) will not progress while sync mode is parked. Use sync mode only in a dedicated process or a `worker_thread` whose only job is to consume shreds. For mixed workloads, switch to `for await` below.
+
+### `for await` / `await listener.nextTransaction()` — mixed async workloads
+
+Async-await flow. Compatible with any other Node async I/O (`dgram`, `fs`, HTTP clients, timers). The iterator parks on the libuv event loop while waiting on UDP.
+
+```typescript
+for await (const { slot, transactions } of listener) {
+  // safe to await other async work here
+}
+```
 
 ## ⚙️ Configuration
 
 ### OS Tuning
 
 ```bash
-# Linux — increase max receive buffer
-sudo sysctl -w net.core.rmem_max=33554432
+# Linux
+sudo sysctl -w net.core.rmem_max=67108864
+sudo sysctl -w net.core.busy_read=200
 
 # macOS
-sudo sysctl -w kern.ipc.maxsockbuf=33554432
+sudo sysctl -w kern.ipc.maxsockbuf=67108864
 ```
 
 ## 🚀 Launch a Shred Stream

@@ -1,4 +1,13 @@
-.DS_Store
 node_modules/
 dist/
 package-lock.json
+*.node
+npm/
+napi-rs/target/
+napi-rs/Cargo.lock
+.DS_Store
+*.swp
+.idea/
+.vscode/
+coverage/
+.nyc_output/
