@@ -55,6 +55,8 @@ while (true) {
 }
 ```
 
+> Transactions may be version 1 (leading byte `0x81`); decode them with a library that supports it.
+
 > `nextTransactionSync()` is the lowest-latency path — recommended for dedicated MEV / sniping consumers. A `null` return is a terminal state (socket closed, fatal I/O like `BrokenPipe` or `NetworkDown`); inspect `listener.lastIoErrorKind` and let your process supervisor (systemd, Docker, k8s) restart you. If you need to mix with other Node async I/O (`dgram.send`, HTTP, timers), use `for await (const batch of listener)` instead — see [Performance](#-performance).
 
 Run it:

@@ -141,7 +141,7 @@ pub struct ShredListener {
 fn serialize_txs(txs: Vec<solana_transaction::versioned::VersionedTransaction>) -> Vec<Buffer> {
     let mut out = Vec::with_capacity(txs.len());
     for tx in txs {
-        match bincode::serialize(&tx) {
+        match wincode::serialize(&tx) {
             Ok(bytes) => out.push(Buffer::from(bytes)),
             Err(_) => continue,
         }
@@ -193,7 +193,7 @@ impl ShredListener {
             let next = listener.transactions().next();
             next.map(|(slot, txs)| {
                 let serialized: Vec<Vec<u8>> =
-                    txs.iter().filter_map(|t| bincode::serialize(t).ok()).collect();
+                    txs.iter().filter_map(|t| wincode::serialize(t).ok()).collect();
                 (slot, serialized)
             })
         }));
@@ -226,7 +226,7 @@ impl ShredListener {
                 let next = listener.transactions().next();
                 Ok(next.map(|(slot, txs)| {
                     let serialized: Vec<Vec<u8>> =
-                        txs.iter().filter_map(|t| bincode::serialize(t).ok()).collect();
+                        txs.iter().filter_map(|t| wincode::serialize(t).ok()).collect();
                     (slot, serialized)
                 }))
             }));

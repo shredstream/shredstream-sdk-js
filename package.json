@@ -1,6 +1,6 @@
 {
   "name": "shredstream",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Solana ShredStream SDK for Node.js — ultra-low latency UDP shred streaming",
   "homepage": "https://shredstream.com",
   "repository": {
